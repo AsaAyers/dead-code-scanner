@@ -1,0 +1,30 @@
+{
+  "name": "dead-code-scanner",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/index.js",
+  "bin": {
+    "dead-code-scanner": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "babel -d dist src",
+    "test": "ava"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AsaAyers/dead-code-scanner.git"
+  },
+  "author": "Asa Ayers <Asa@AsaAyers.com>",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/AsaAyers/dead-code-scanner/issues"
+  },
+  "homepage": "https://github.com/AsaAyers/dead-code-scanner#readme",
+  "dependencies": {
+    "flow-bin": "^0.54.1"
+  },
+  "devDependencies": {
+    "ava": "^0.22.0",
+    "babel-cli": "^6.26.0"
+  }
+}
