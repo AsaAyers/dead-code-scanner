@@ -148,10 +148,9 @@ export default async function scanFile (context: Context, filepath: string): Pro
   fileInfo.visited = true
 
   const code: string = String(await readFile(filepath))
-
   const ast = parseCode(code)
   if (!ast) {
-    fileInfo.failedToParse = true
+    fileInfo.errors.push(`parse error`)
     return
   }
   const sourceOfNode = ({ start, end }) => {
@@ -167,13 +166,16 @@ export default async function scanFile (context: Context, filepath: string): Pro
       console.log(filepath, fileInfo)
     }
     if (tmp.moduleName[0] === '.') {
+      let nextFile
       try {
-        const nextFile = await resolve(tmp.moduleName, {
+        nextFile = await resolve(tmp.moduleName, {
           basedir: path.dirname(filepath)
         })
-        return scanFile(context, nextFile)
       } catch (e) {
+        fileInfo.errors.push(`Unable to resolve: ${tmp.moduleName}`)
+        return
       }
+      return scanFile(context, nextFile)
     }
   }))
 }

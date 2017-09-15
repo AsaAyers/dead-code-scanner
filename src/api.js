@@ -5,6 +5,9 @@ import promisify from 'es6-promisify'
 import scanFile from './scan-file.js'
 import type { Context, FileInfo } from './types'
 
+const readdir = promisify(fs.readdir)
+const stat = promisify(fs.stat)
+
 export const expandFile = (filename: string) => {
   const fullPath = path.resolve(process.cwd(), filename)
 
@@ -15,8 +18,6 @@ export const expandFile = (filename: string) => {
   return fullPath
 }
 
-const readdir = promisify(fs.readdir)
-const stat = promisify(fs.stat)
 async function buildContext (root: string, context: Context = {}) {
   const directories = []
   const filenames = await readdir(root)
@@ -51,7 +52,13 @@ export async function scanFiles (root: string, files: Array<string>) {
     throw new Error(`Root must be a directory: ${root}`)
   }
 
-  const context = await buildContext(root)
+  let context
+  try {
+    context = await buildContext(root)
+  } catch (e) {
+    console.log('error building context: ', e)
+    throw e
+  }
   const f = files.map(expandFile)
 
   await Promise.all(

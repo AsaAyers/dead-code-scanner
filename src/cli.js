@@ -5,6 +5,10 @@ import { scanFiles, expandFile } from './api'
 import type { Context } from './types'
 
 function logContext (root, context: Context) {
+  const getName = (key) => (key.substr(0, root.length) === root)
+    ? key.substr(root.length)
+    : key
+
   let errorCount = 0
   const errors = {}
   let scannedCount = 0
@@ -14,12 +18,7 @@ function logContext (root, context: Context) {
     if (fileInfo.visited) {
       scannedCount++
     }
-    let name = key
-
-    // console.log(root, 'key.substr(0, root.length): ', key.substr(0, root.length))
-    if (key.substr(0, root.length) === root) {
-      name = key.substr(root.length)
-    }
+    const name = getName(key)
 
     if (fileInfo.errors.length > 0) {
       errors[name] = fileInfo.errors
@@ -27,8 +26,11 @@ function logContext (root, context: Context) {
     }
     // console.log(name, fileInfo)
   })
-  console.log(errors)
+  console.log(fileList.filter(key =>
+    !context[key].visited
+  ).map(getName))
 
+  console.log(errors)
   console.log('files scanned:', scannedCount)
   console.log('unreached files:', fileList.length - scannedCount)
   console.log('error count:', errorCount)
@@ -44,13 +46,17 @@ async function cli (node, cli, root, ...files: Array<string>) {
     throw new Error('You must specify one or more entry files')
   }
 
+  let context
   try {
-    const context = await scanFiles(root, files)
-    logContext(root, context)
+    context = await scanFiles(root, files)
   } catch (e) {
     console.error(e)
     process.exit(1)
   }
+  logContext(root, context)
 }
+process.on('unhandledRejection', (reason) => {
+  console.log('Reason: ' + reason)
+})
 
 cli(...process.argv)
