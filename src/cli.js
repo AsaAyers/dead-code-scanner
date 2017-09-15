@@ -5,16 +5,33 @@ import { scanFiles, expandFile } from './api'
 import type { Context } from './types'
 
 function logContext (root, context: Context) {
-  Object.keys(context).forEach(key => {
-    if (context[key].visited) return
+  let errorCount = 0
+  const errors = {}
+  let scannedCount = 0
+  const fileList = Object.keys(context)
+  fileList.forEach(key => {
+    const fileInfo = context[key]
+    if (fileInfo.visited) {
+      scannedCount++
+    }
     let name = key
 
     // console.log(root, 'key.substr(0, root.length): ', key.substr(0, root.length))
     if (key.substr(0, root.length) === root) {
       name = key.substr(root.length)
     }
-    console.log(name, context[key])
+
+    if (fileInfo.errors.length > 0) {
+      errors[name] = fileInfo.errors
+      errorCount += fileInfo.errors.length
+    }
+    // console.log(name, fileInfo)
   })
+  console.log(errors)
+
+  console.log('files scanned:', scannedCount)
+  console.log('unreached files:', fileList.length - scannedCount)
+  console.log('error count:', errorCount)
 }
 
 async function cli (node, cli, root, ...files: Array<string>) {

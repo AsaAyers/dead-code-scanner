@@ -109,30 +109,24 @@ const visitors = {
       t.isIdentifier(path.node.callee.property, { name: 'resolve' })
 
     if (isRequire || isRequireResolve) {
-      if (path.node.arguments.length !== 1) {
-        fileInfo.errors.push(
-          `Invalid require: ${this.sourceOfNode(path.node)}`
-        )
-      }
+      let moduleName
       const arg = path.node.arguments[0]
       if (t.isLiteral(arg)) {
-        let moduleName = arg.value
+        moduleName = arg.value
+      }
+      if (moduleName == null && t.isTemplateLiteral(arg) && arg.quasis.length === 1) {
+        const quasi = arg.quasis[0]
+        moduleName = quasi.value.cooked
+      }
 
-        if (t.isTemplateLiteral(arg) && arg.quasis.length === 1) {
-          const quasi = arg.quasis[0]
-          moduleName = quasi.value.cooked
-        }
-
-        if (!moduleName) {
-          throw new Error('Missing moduleName')
-        }
+      if (moduleName != null) {
         fileInfo.imports.push({
           imported: 'default',
           moduleName
         })
       } else {
         fileInfo.errors.push(
-          `Invalid require: ${this.sourceOfNode(path.node)}`
+          `Unable to parse require: ${this.sourceOfNode(path.node)}`
         )
       }
     }
