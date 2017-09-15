@@ -7,7 +7,9 @@
     "dead-code-scanner": "dist/cli.js"
   },
   "scripts": {
-    "build": "babel -d dist src",
+    "build": "babel --source-maps -d dist src",
+    "lint": "eslint --fix src",
+    "pretest": "npm run lint",
     "test": "ava"
   },
   "repository": {
@@ -21,10 +23,27 @@
   },
   "homepage": "https://github.com/AsaAyers/dead-code-scanner#readme",
   "dependencies": {
-    "flow-bin": "^0.54.1"
+    "babel-traverse": "^7.0.0-beta.0",
+    "babel-types": "^7.0.0-beta.0",
+    "babylon": "^7.0.0-beta.23",
+    "es6-promisify": "^5.0.0",
+    "flow-bin": "^0.54.1",
+    "resolve": "^1.4.0"
   },
   "devDependencies": {
     "ava": "^0.22.0",
-    "babel-cli": "^6.26.0"
+    "babel-cli": "^7.0.0-beta.0",
+    "babel-eslint": "^8.0.0-alpha.17",
+    "babel-plugin-transform-async-to-generator": "^7.0.0-beta.0",
+    "babel-plugin-transform-object-rest-spread": "^7.0.0-beta.0",
+    "babel-preset-env": "^2.0.0-beta.0",
+    "babel-preset-flow": "^7.0.0-beta.0",
+    "eslint": "^4.6.1",
+    "eslint-config-standard": "^10.2.1",
+    "eslint-plugin-import": "^2.7.0",
+    "eslint-plugin-node": "^5.1.1",
+    "eslint-plugin-promise": "^3.5.0",
+    "eslint-plugin-standard": "^3.0.1",
+    "source-map-support": "^0.4.18"
   }
 }
