@@ -1,20 +1,45 @@
 #!/usr/bin/env node
 // @flow
 import 'source-map-support/register'
-import { scanFiles, expandFile } from './api'
+import { scanFiles } from './api'
 import type { Context } from './types'
 import path from 'path'
+import yargs from 'yargs'
+import fs from 'fs'
 
-function rekeyContext (context: Context): Context {
+export const expandFile = (filename: string) => {
+  const fullPath = path.resolve(process.cwd(), filename)
+
+  if (!fs.existsSync(fullPath)) {
+    throw new Error(`Unable to locate file: ${filename}`)
+  }
+
+  return fullPath
+}
+const program = yargs
+  .usage(`Usage: $0 --src <dir> <files...> `)
+
+  .describe('ignore', '.gitignore pattern to ignore')
+
+  .describe('root', 'Your project root (where package.json lives)')
+  .default('root', process.cwd())
+
+  .describe('src', 'Your source directory')
+  .coerce('src', expandFile)
+
+  .coerce('_', (files) => files.map(expandFile))
+  .demandOption('src')
+
+function rekeyContext (root: string, context: Context): Context {
   return Object.keys(context).reduce((acc, key) => {
-    const name = path.relative(process.cwd(), key)
+    const name = path.relative(root, key)
     acc[name] = context[key]
     return acc
   }, {})
 }
 
-function logContext (ctx: Context) {
-  const context = rekeyContext(ctx)
+function logContext (root: string, ctx: Context) {
+  const context = rekeyContext(root, ctx)
 
   let errorCount = 0
   let scannedCount = 0
@@ -37,9 +62,9 @@ function logContext (ctx: Context) {
 
   const write = (...args) => process.stdout.write(args.join(' ') + '\n')
 
-  write(`Not Found (${notFound.length})`)
-  notFound.forEach(name => write(`  ${name}`))
-  write('\n\n')
+  // write(`Not Found (${notFound.length})`)
+  // notFound.forEach(name => write(`  ${name}`))
+  // write('\n\n')
 
   write(`Errors (${errorCount})`)
   Object.keys(errors).forEach(name => {
@@ -51,19 +76,28 @@ function logContext (ctx: Context) {
   write('error count:', errorCount)
 }
 
-async function cli (node, cli, root, ...files: Array<string>) {
-  // I tried using `commander` but it wasn't saving me any time
-  if (!root) {
-    throw new Error('You must specify a root directory')
+type Options = {
+  root: string,
+  src: string,
+  _: Array<string>,
+  ignore: string | ?Array<string>,
+}
+
+async function cli (options: Options) {
+  const { _: files, root, src } = options
+  let ignorePatterns: Array<string> = []
+  if (options.ignore != null) {
+    ignorePatterns = Array.isArray(options.ignore) ? options.ignore : [options.ignore]
   }
-  root = expandFile(root)
+
   if (files.length === 0) {
-    throw new Error('You must specify one or more entry files')
+    program.showHelp()
+    return
   }
 
   try {
-    const context = await scanFiles(root, files)
-    logContext(context)
+    const context = await scanFiles(root, src, files, ignorePatterns)
+    logContext(root, context)
   } catch (e) {
     console.error(e)
     process.exit(1)
@@ -73,4 +107,4 @@ process.on('unhandledRejection', (reason) => {
   console.log('Reason: ' + reason)
 })
 
-cli(...process.argv)
+cli(program.argv)

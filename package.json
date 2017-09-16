@@ -30,7 +30,8 @@
     "es6-promisify": "^5.0.0",
     "flow-bin": "^0.54.1",
     "gitignore-parser": "0.0.2",
-    "resolve": "^1.4.0"
+    "resolve": "^1.4.0",
+    "yargs": "^8.0.2"
   },
   "devDependencies": {
     "ava": "^0.22.0",
