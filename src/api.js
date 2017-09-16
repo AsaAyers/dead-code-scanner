@@ -4,7 +4,7 @@ import fs from 'fs'
 import promisify from 'es6-promisify'
 import scanFile from './scan-file.js'
 import type { Context, FileInfo } from './types'
-import { compile as giCompile } from 'gitignore-parser'
+import ignore from 'ignore'
 
 const readdir = promisify(fs.readdir)
 const readFile = promisify(fs.readFile)
@@ -12,11 +12,11 @@ const stat = promisify(fs.stat)
 const exists = (file) => stat(file).catch(() => false).then(Boolean)
 
 type BuilderOptions = {
-  src: string,
-  accepts: (string) => boolean
+  accepts: (string) => boolean,
+  extensions: Array<string>,
 }
 
-async function buildContext ({ src, accepts }: BuilderOptions, context: Context = {}) {
+async function buildContext (src: string, options: BuilderOptions, context: Context = {}) {
   const directories = []
   const filenames = await readdir(src)
 
@@ -24,13 +24,14 @@ async function buildContext ({ src, accepts }: BuilderOptions, context: Context 
     if (filename === '.git') return
     const file = path.resolve(src, filename)
 
-    if (!accepts(file)) return
+    if (!options.accepts(file)) return
 
     const stats = await stat(file)
 
+    const ext = path.extname(file)
     if (stats.isDirectory()) {
       directories.push(file)
-    } else {
+    } else if (options.extensions.indexOf(ext) >= 0) {
       context[file] = ({
         visited: false,
         imports: [],
@@ -39,33 +40,26 @@ async function buildContext ({ src, accepts }: BuilderOptions, context: Context 
     }
   }))
 
-  await Promise.all(directories.map(d => buildContext({ src: d, accepts }, context)))
+  await Promise.all(directories.map(d => buildContext(d, options, context)))
 
   return context
 }
 
 async function buildAccepts (root: string, ignorePatterns: Array<string>) {
   const filename = path.join(root, '.gitignore')
-  let content = ''
 
+  const gitignore = ignore()
   if (await exists(filename)) {
-    content = String(await readFile(filename))
+    const content = String(await readFile(filename))
+    gitignore.add(content)
   }
   if (ignorePatterns.length > 0) {
-    content += '\n\n' + ignorePatterns.join('\n')
+    gitignore.add(ignorePatterns)
   }
 
-  let gitignore
-  if (content.trim().length > 0) {
-    gitignore = giCompile(content)
-  }
   return (filename) => {
-    if (gitignore) {
-      const relPath = path.relative(root, filename)
-      return gitignore.accepts(relPath)
-    }
-
-    return true
+    const relPath = path.relative(root, filename)
+    return !gitignore.ignores(relPath)
   }
 }
 
@@ -79,19 +73,25 @@ export async function scanFiles (root: string, src: string, files: Array<string>
   if (!(await exists(packageJson))) {
     throw new Error(`Please run this from your project src`)
   }
-
   const accepts = await buildAccepts(root, ignorePatterns)
 
   let context
   try {
-    context = await buildContext({ src, accepts })
+    const options = {
+      accepts,
+      extensions: ['.js']
+    }
+    context = await buildContext(src, options)
   } catch (e) {
     console.log('error building context: ', e)
     throw e
   }
 
+  const helpers = {
+    accepts
+  }
   await Promise.all(
-    files.map(file => scanFile(context, file))
+    files.map(file => scanFile(context, helpers, file))
   )
 
   return context

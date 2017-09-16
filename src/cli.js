@@ -6,6 +6,10 @@ import type { Context } from './types'
 import path from 'path'
 import yargs from 'yargs'
 import fs from 'fs'
+import { table } from 'table'
+import makeTree from './make-tree'
+
+const write = (...args) => process.stdout.write(args.join(' ') + '\n')
 
 export const expandFile = (filename: string) => {
   const fullPath = path.resolve(process.cwd(), filename)
@@ -38,42 +42,71 @@ function rekeyContext (root: string, context: Context): Context {
   }, {})
 }
 
-function logContext (root: string, ctx: Context) {
+type Report = {
+  scannedCount: number,
+  errorCount: number,
+  errors: Array<Array<string>>,
+  notFound: Array<string>,
+}
+function buildReport (root: string, ctx: Context): Report {
   const context = rekeyContext(root, ctx)
+  const report: Report = {
+    scannedCount: 0,
+    errorCount: 0,
+    errors: [],
+    notFound: []
+  }
 
-  let errorCount = 0
-  let scannedCount = 0
-  const errors = {}
   const fileList = Object.keys(context)
-  const notFound = []
   fileList.forEach(name => {
     const fileInfo = context[name]
     if (fileInfo.visited) {
-      scannedCount++
+      report.scannedCount++
     } else {
-      notFound.push(name)
+      report.notFound.push(name)
     }
 
     if (fileInfo.errors.length > 0) {
-      errors[name] = fileInfo.errors
-      errorCount += fileInfo.errors.length
+      report.errorCount += fileInfo.errors.length
+
+      fileInfo.errors.forEach(({ group, details }) => {
+        report.errors.push(
+          [group, name, details || '']
+        )
+      })
     }
   })
 
-  const write = (...args) => process.stdout.write(args.join(' ') + '\n')
+  return report
+}
 
-  // write(`Not Found (${notFound.length})`)
-  // notFound.forEach(name => write(`  ${name}`))
-  // write('\n\n')
+const sortByColumns = (columns: Array<number>) => (a, b) => {
+  for (var i = 0; i < columns.length; i++) {
+    const col = columns[i]
+    if (a[col] < b[col]) return -1
+    if (a[col] > b[col]) return 1
+  }
+  return 0
+}
 
-  write(`Errors (${errorCount})`)
-  Object.keys(errors).forEach(name => {
-    write(`  ${name}`)
-    errors[name].forEach(err => write('  ', err))
-  })
+function logReport ({ errorCount, errors, notFound }: Report) {
+  const errorOptions = {
+    drawHorizontalLine: (index, size) => {
+      return index === 0 || index === 1 || index === size - 1 || index === size
+    }
+  }
+  const errorData = [
+    ['Error Group', 'File', 'Details'],
+    ...(errors.sort(sortByColumns([0, 2]))),
+    ['Error Count:', errorCount, null]
+  ]
+  const errorTable = table(errorData, errorOptions)
 
-  write('files scanned:', scannedCount)
-  write('error count:', errorCount)
+  write('Not found:')
+  write(makeTree(notFound))
+  write('Unreachable files:', notFound.length)
+
+  write(errorTable)
 }
 
 type Options = {
@@ -97,7 +130,10 @@ async function cli (options: Options) {
 
   try {
     const context = await scanFiles(root, src, files, ignorePatterns)
-    logContext(root, context)
+    const report = buildReport(root, context)
+
+    logReport(report)
+    // logContext(root, context)
   } catch (e) {
     console.error(e)
     process.exit(1)

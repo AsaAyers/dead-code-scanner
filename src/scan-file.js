@@ -126,8 +126,10 @@ const visitors = {
           moduleName
         })
       } else {
-        fileInfo.errors.push(
-          `Unable to parse require: ${this.sourceOfNode(path.node)}`
+        fileInfo.errors.push({
+          group: 'Unable to parse require',
+          details: this.sourceOfNode(path.node)
+        }
         )
       }
     }
@@ -136,7 +138,10 @@ const visitors = {
 
 // debugVisitors(visitors)
 
-export default async function scanFile (context: Context, filepath: string): Promise<void> {
+type Helpers = {
+  accepts: (string) => boolean
+}
+export default async function scanFile (context: Context, helpers: Helpers, filepath: string): Promise<void> {
   let fileInfo: ?FileInfo = context[filepath]
   if (fileInfo == null) {
     fileInfo = context[filepath] = {
@@ -152,7 +157,9 @@ export default async function scanFile (context: Context, filepath: string): Pro
   const code: string = String(await readFile(filepath))
   const ast = parseCode(code)
   if (!ast) {
-    fileInfo.errors.push(`parse error`)
+    fileInfo.errors.push({
+      group: `parse error`
+    })
     return
   }
   const sourceOfNode = ({ start, end }) => {
@@ -174,11 +181,17 @@ export default async function scanFile (context: Context, filepath: string): Pro
           basedir: path.dirname(filepath)
         })
       } catch (e) {
-        // $FlowFixMe - I don't see how fileInfo could be null here
-        fileInfo.errors.push(`Unable to resolve: ${tmp.moduleName}`)
+        // $FlowFixMe I don't see how fileInfo could be null here
+        const fi: FileInfo = fileInfo
+        fi.errors.push({
+          group: 'Unable to resolve',
+          details: tmp.moduleName
+        })
         return
       }
-      return scanFile(context, nextFile)
+      if (helpers.accepts(nextFile)) {
+        return scanFile(context, helpers, nextFile)
+      }
     }
   }))
 }

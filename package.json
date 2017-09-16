@@ -13,6 +13,11 @@
     "pretest": "npm run lint",
     "test": "true"
   },
+  "ava": {
+    "require": [
+      "babel-register"
+    ]
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/AsaAyers/dead-code-scanner.git"
@@ -30,7 +35,9 @@
     "es6-promisify": "^5.0.0",
     "flow-bin": "^0.54.1",
     "gitignore-parser": "0.0.2",
+    "ignore": "^3.3.5",
     "resolve": "^1.4.0",
+    "table": "^4.0.1",
     "yargs": "^8.0.2"
   },
   "devDependencies": {
