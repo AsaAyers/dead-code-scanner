@@ -3,37 +3,52 @@
 import 'source-map-support/register'
 import { scanFiles, expandFile } from './api'
 import type { Context } from './types'
+import path from 'path'
 
-function logContext (root, context: Context) {
-  const getName = (key) => (key.substr(0, root.length) === root)
-    ? key.substr(root.length)
-    : key
+function rekeyContext (context: Context): Context {
+  return Object.keys(context).reduce((acc, key) => {
+    const name = path.relative(process.cwd(), key)
+    acc[name] = context[key]
+    return acc
+  }, {})
+}
+
+function logContext (ctx: Context) {
+  const context = rekeyContext(ctx)
 
   let errorCount = 0
-  const errors = {}
   let scannedCount = 0
+  const errors = {}
   const fileList = Object.keys(context)
-  fileList.forEach(key => {
-    const fileInfo = context[key]
+  const notFound = []
+  fileList.forEach(name => {
+    const fileInfo = context[name]
     if (fileInfo.visited) {
       scannedCount++
+    } else {
+      notFound.push(name)
     }
-    const name = getName(key)
 
     if (fileInfo.errors.length > 0) {
       errors[name] = fileInfo.errors
       errorCount += fileInfo.errors.length
     }
-    // console.log(name, fileInfo)
   })
-  console.log(fileList.filter(key =>
-    !context[key].visited
-  ).map(getName))
 
-  console.log(errors)
-  console.log('files scanned:', scannedCount)
-  console.log('unreached files:', fileList.length - scannedCount)
-  console.log('error count:', errorCount)
+  const write = (...args) => process.stdout.write(args.join(' ') + '\n')
+
+  write(`Not Found (${notFound.length})`)
+  notFound.forEach(name => write(`  ${name}`))
+  write('\n\n')
+
+  write(`Errors (${errorCount})`)
+  Object.keys(errors).forEach(name => {
+    write(`  ${name}`)
+    errors[name].forEach(err => write('  ', err))
+  })
+
+  write('files scanned:', scannedCount)
+  write('error count:', errorCount)
 }
 
 async function cli (node, cli, root, ...files: Array<string>) {
@@ -48,7 +63,7 @@ async function cli (node, cli, root, ...files: Array<string>) {
 
   try {
     const context = await scanFiles(root, files)
-    logContext(root, context)
+    logContext(context)
   } catch (e) {
     console.error(e)
     process.exit(1)
