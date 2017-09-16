@@ -3,12 +3,12 @@
 type Import = {
   imported: string,
   moduleName: string,
-  errors: Array<string>,
 }
 
 export type FileInfo = {
-  visited?: true,
+  visited: bool,
   imports: Array<Import>,
+  errors: Array<string>,
 }
 
 export type Context = {

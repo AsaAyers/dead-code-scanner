@@ -34,6 +34,7 @@ async function buildContext (root: string, context: Context = {}) {
       directories.push(file)
     } else {
       context[file] = ({
+        visited: false,
         imports: [],
         errors: []
       }: FileInfo)

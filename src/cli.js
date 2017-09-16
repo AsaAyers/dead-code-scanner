@@ -46,14 +46,13 @@ async function cli (node, cli, root, ...files: Array<string>) {
     throw new Error('You must specify one or more entry files')
   }
 
-  let context
   try {
-    context = await scanFiles(root, files)
+    const context = await scanFiles(root, files)
+    logContext(root, context)
   } catch (e) {
     console.error(e)
     process.exit(1)
   }
-  logContext(root, context)
 }
 process.on('unhandledRejection', (reason) => {
   console.log('Reason: ' + reason)

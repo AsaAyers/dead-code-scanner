@@ -47,6 +47,7 @@ function parseCode (code) {
 
 const indent = (n) => Array(n).fill(' ').join('')
 
+// eslint-disable-next-line no-unused-vars
 const debugVisitors = (visitors) => {
   let depth = 0
   visitors.enter = function (path) {
@@ -139,12 +140,13 @@ export default async function scanFile (context: Context, filepath: string): Pro
   let fileInfo: ?FileInfo = context[filepath]
   if (fileInfo == null) {
     fileInfo = context[filepath] = {
+      visited: false,
       imports: [],
       errors: []
     }
   }
 
-  if (fileInfo.visited) return
+  if (fileInfo.visited === true) return
   fileInfo.visited = true
 
   const code: string = String(await readFile(filepath))
@@ -172,6 +174,7 @@ export default async function scanFile (context: Context, filepath: string): Pro
           basedir: path.dirname(filepath)
         })
       } catch (e) {
+        // $FlowFixMe - I don't see how fileInfo could be null here
         fileInfo.errors.push(`Unable to resolve: ${tmp.moduleName}`)
         return
       }
