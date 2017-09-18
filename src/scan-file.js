@@ -92,8 +92,6 @@ const importVisitors = {
   }
 }
 
-// debugVisitors(importVisitors)
-
 const visitors = {
   ImportDeclaration (path) {
     const fileInfo: FileInfo = this.fileInfo
@@ -149,15 +147,40 @@ const visitors = {
   }
 }
 
-// debugVisitors(visitors)
+const resolveImports = (filePath, fileInfo) => async (acc: Promise<Array<string>>, moduleName: string): Promise<Array<string>> => {
+  if (moduleName[0] !== '.') return acc
+  if (moduleName.indexOf('*') >= 0) {
+    const modules = await glob(moduleName, {
+      cwd: path.dirname(filePath)
+    })
+
+    const files = await modules.reduce(resolveImports(filePath, fileInfo), acc)
+
+    return (await acc).concat(files)
+  }
+
+  try {
+    const nextFile = await resolve(moduleName, {
+      basedir: path.dirname(filePath)
+    })
+    return (await acc).concat([nextFile])
+  } catch (e) {
+    fileInfo.errors.push({
+      group: 'Unable to resolve',
+      details: moduleName
+    })
+  }
+
+  return acc
+}
 
 type Helpers = {
   accepts: (string) => boolean
 }
-export default async function scanFile (context: Context, helpers: Helpers, filepath: string): Promise<void> {
-  let fileInfo: ?FileInfo = context[filepath]
+export default async function scanFile (context: Context, helpers: Helpers, filePath: string): Promise<void> {
+  let fileInfo: ?FileInfo = context[filePath]
   if (fileInfo == null) {
-    fileInfo = context[filepath] = {
+    fileInfo = context[filePath] = {
       visited: false,
       imports: [],
       errors: []
@@ -167,7 +190,7 @@ export default async function scanFile (context: Context, helpers: Helpers, file
   if (fileInfo.visited === true) return
   fileInfo.visited = true
 
-  const code: string = String(await readFile(filepath))
+  const code: string = String(await readFile(filePath))
   const ast = parseCode(code)
   if (!ast) {
     fileInfo.errors.push({
@@ -183,38 +206,9 @@ export default async function scanFile (context: Context, helpers: Helpers, file
   }
   traverse(ast, visitors, undefined, { fileInfo, code, sourceOfNode })
 
-  const resolveImports = async (acc: Promise<Array<string>>, moduleName: string): Promise<Array<string>> => {
-    if (moduleName[0] !== '.') return acc
-    if (moduleName.indexOf('*') >= 0) {
-      const modules = await glob(moduleName, {
-        cwd: path.dirname(filepath)
-      })
-
-      const files = await modules.reduce(resolveImports, acc)
-
-      return (await acc).concat(files)
-    }
-
-    try {
-      const nextFile = await resolve(moduleName, {
-        basedir: path.dirname(filepath)
-      })
-      return (await acc).concat([nextFile])
-    } catch (e) {
-      // $FlowFixMe I don't see how fileInfo could be null here
-      const fi: FileInfo = fileInfo
-      fi.errors.push({
-        group: 'Unable to resolve',
-        details: moduleName
-      })
-    }
-
-    return acc
-  }
-
   const resolvedFiles: Array<string> = await fileInfo.imports
     .map((tmp): string => tmp.moduleName)
-    .reduce(resolveImports, Promise.resolve([]))
+    .reduce(resolveImports(filePath, fileInfo), Promise.resolve([]))
 
   await Promise.all(
     resolvedFiles
