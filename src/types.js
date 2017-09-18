@@ -1,6 +1,6 @@
 // @flow
 
-type Import = {
+export type Import = {
   imported: string,
   moduleName: string,
 }

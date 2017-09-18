@@ -6,9 +6,11 @@ import promisify from 'es6-promisify'
 import traverse from 'babel-traverse'
 import * as t from 'babel-types'
 import r from 'resolve'
+import g from 'glob'
 
 import type { Context, FileInfo } from './types'
 
+const glob = promisify(g)
 const resolve = promisify(r)
 const readFile = promisify(fs.readFile)
 
@@ -115,9 +117,20 @@ const visitors = {
       if (t.isLiteral(arg)) {
         moduleName = arg.value
       }
-      if (moduleName == null && t.isTemplateLiteral(arg) && arg.quasis.length === 1) {
-        const quasi = arg.quasis[0]
-        moduleName = quasi.value.cooked
+      if (moduleName == null && t.isTemplateLiteral(arg)) {
+        if (arg.quasis.length === 1) {
+          const quasi = arg.quasis[0]
+          moduleName = quasi.value.cooked
+        } else {
+          moduleName = arg.quasis
+            .map((element) => element.value.cooked)
+            .join('*')
+
+          fileInfo.errors.push({
+            group: 'WARNING: Converted template into a glob',
+            details: this.sourceOfNode(path.node) + ` became: ${moduleName}`
+          })
+        }
       }
 
       if (moduleName != null) {
@@ -170,28 +183,42 @@ export default async function scanFile (context: Context, helpers: Helpers, file
   }
   traverse(ast, visitors, undefined, { fileInfo, code, sourceOfNode })
 
-  await Promise.all(fileInfo.imports.map(async (tmp) => {
-    if (!tmp.moduleName) {
-      console.log(filepath, fileInfo)
+  const resolveImports = async (acc: Promise<Array<string>>, moduleName: string): Promise<Array<string>> => {
+    if (moduleName[0] !== '.') return acc
+    if (moduleName.indexOf('*') >= 0) {
+      const modules = await glob(moduleName, {
+        cwd: path.dirname(filepath)
+      })
+
+      const files = await modules.reduce(resolveImports, acc)
+
+      return (await acc).concat(files)
     }
-    if (tmp.moduleName[0] === '.') {
-      let nextFile
-      try {
-        nextFile = await resolve(tmp.moduleName, {
-          basedir: path.dirname(filepath)
-        })
-      } catch (e) {
-        // $FlowFixMe I don't see how fileInfo could be null here
-        const fi: FileInfo = fileInfo
-        fi.errors.push({
-          group: 'Unable to resolve',
-          details: tmp.moduleName
-        })
-        return
-      }
-      if (helpers.accepts(nextFile)) {
-        return scanFile(context, helpers, nextFile)
-      }
+
+    try {
+      const nextFile = await resolve(moduleName, {
+        basedir: path.dirname(filepath)
+      })
+      return (await acc).concat([nextFile])
+    } catch (e) {
+      // $FlowFixMe I don't see how fileInfo could be null here
+      const fi: FileInfo = fileInfo
+      fi.errors.push({
+        group: 'Unable to resolve',
+        details: moduleName
+      })
     }
-  }))
+
+    return acc
+  }
+
+  const resolvedFiles: Array<string> = await fileInfo.imports
+    .map((tmp): string => tmp.moduleName)
+    .reduce(resolveImports, Promise.resolve([]))
+
+  await Promise.all(
+    resolvedFiles
+      .filter(helpers.accepts)
+      .map(nextFile => scanFile(context, helpers, nextFile))
+  )
 }
