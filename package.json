@@ -10,12 +10,13 @@
     "dead-code-scanner": "dist/cli.js"
   },
   "scripts": {
-    "build": "babel -d dist src",
+    "build": "babel --source-maps -d dist src",
     "lint": "eslint --fix src",
+    "prebuild": "npm run test",
     "precommit": "npm test",
     "prepare": "npm run build",
     "pretest": "npm run lint",
-    "test": "true"
+    "test": "ava"
   },
   "ava": {
     "require": [
@@ -43,6 +44,7 @@
     "glob": "^7.1.2",
     "ignore": "^3.3.5",
     "resolve": "^1.4.0",
+    "source-map-support": "^0.4.18",
     "table": "^4.0.1",
     "yargs": "^8.0.2"
   },
@@ -60,7 +62,6 @@
     "eslint-plugin-node": "^5.1.1",
     "eslint-plugin-promise": "^3.5.0",
     "eslint-plugin-standard": "^3.0.1",
-    "husky": "^0.14.3",
-    "source-map-support": "^0.4.18"
+    "husky": "^0.14.3"
   }
 }
