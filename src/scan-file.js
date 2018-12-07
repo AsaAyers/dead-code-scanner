@@ -7,12 +7,14 @@ import traverse from 'babel-traverse'
 import * as t from 'babel-types'
 import r from 'resolve'
 import g from 'glob'
+import createDebug from 'debug'
 
 import type { Context, FileInfo } from './types'
 
 const glob = promisify(g)
-const resolve = promisify(r)
+export const resolve = promisify(r)
 const readFile = promisify(fs.readFile)
+const debug = createDebug('dead-code-scanner:scan-file')
 
 const plugins = [
   'estree',
@@ -147,35 +149,66 @@ const visitors = {
   }
 }
 
-const resolveImports = (filePath, fileInfo) => async (acc: Promise<Array<string>>, moduleName: string): Promise<Array<string>> => {
-  if (moduleName[0] !== '.') return acc
+const resolveImports = (helpers, filePath, fileInfo) => async (acc: Promise<Array<string>>, moduleName: string): Promise<Array<string>> => {
+  // if (moduleName[0] !== '.') return acc
   if (moduleName.indexOf('*') >= 0) {
     const modules = await glob(moduleName, {
       cwd: path.dirname(filePath)
     })
 
-    const files = await modules.reduce(resolveImports(filePath, fileInfo), acc)
+    const files = await modules.reduce(resolveImports(helpers, filePath, fileInfo), acc)
 
     return (await acc).concat(files)
   }
 
-  try {
-    const nextFile = await resolve(moduleName, {
-      basedir: path.dirname(filePath)
-    })
-    return (await acc).concat([nextFile])
-  } catch (e) {
-    fileInfo.errors.push({
-      group: 'Unable to resolve',
-      details: moduleName
-    })
+  // I don't need to implement custom module roots at this point
+  // https://github.com/AsaAyers/js-hyperclick/blob/6240dc8dd738371d380a1c875f543887ae5eb65d/lib/core/resolve-module.js#L85-L135
+  let roots = [path.dirname(filePath)]
+  if (moduleName[0] !== '.') {
+    roots = roots.concat(helpers.moduleRoots)
   }
 
+  for (let i = 0; i < roots.length; i++) {
+    const basedir = roots[i]
+    // When using module roots, this needs to be made into a relative path
+    let mName = (i === 0) ? moduleName : `./${moduleName}`
+    try {
+      if (moduleName.slice(0, 2) === 'ui') {
+        debug(mName, basedir)
+      }
+      const nextFile = await resolve(mName, {
+        basedir,
+        extensions: helpers.extensions
+      })
+
+      if (moduleName.slice(0, 2) === 'ui') {
+        debug('found', nextFile)
+      }
+
+      if (!helpers.inSrc(nextFile)) {
+        return acc
+      }
+      return (await acc).concat([nextFile])
+    } catch (e) {
+      // pass
+    }
+  }
+  if (moduleName.slice(0, 2) === 'ui') {
+    process.exit(1)
+  }
+
+  fileInfo.errors.push({
+    group: 'Unable to resolve',
+    details: moduleName
+  })
   return acc
 }
 
 type Helpers = {
-  accepts: (string) => boolean
+  moduleRoots: Array<string>,
+  accepts: (string) => boolean,
+  extensions: Array<string>,
+  inSrc: (string) => boolean,
 }
 export default async function scanFile (context: Context, helpers: Helpers, filePath: string): Promise<void> {
   let fileInfo: ?FileInfo = context[filePath]
@@ -193,8 +226,9 @@ export default async function scanFile (context: Context, helpers: Helpers, file
   const code: string = String(await readFile(filePath))
   const ast = parseCode(code)
   if (!ast) {
+    const ext = path.extname(filePath)
     fileInfo.errors.push({
-      group: `parse error`
+      group: `parse error ${ext}`
     })
     return
   }
@@ -208,7 +242,7 @@ export default async function scanFile (context: Context, helpers: Helpers, file
 
   const resolvedFiles: Array<string> = await fileInfo.imports
     .map((tmp): string => tmp.moduleName)
-    .reduce(resolveImports(filePath, fileInfo), Promise.resolve([]))
+    .reduce(resolveImports(helpers, filePath, fileInfo), Promise.resolve([]))
 
   await Promise.all(
     resolvedFiles
