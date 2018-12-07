@@ -201,7 +201,7 @@ async function cli (options: Options) {
 
     console.log('out', options.out)
     if (options.out != null) {
-      // fs.writeFileSync(options.out, report.notFound.join('\n'))
+      fs.writeFileSync(options.out, report.notFound.join('\n'))
     }
   } catch (e) {
     console.error(e)
