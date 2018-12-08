@@ -1,10 +1,8 @@
 // @flow
 import fs from 'fs'
 import path from 'path'
-import { parse } from 'babylon'
+import { parse, traverse, types as t } from '@babel/core'
 import promisify from 'es6-promisify'
-import traverse from 'babel-traverse'
-import * as t from 'babel-types'
 import r from 'resolve'
 import g from 'glob'
 import createDebug from 'debug'
@@ -15,37 +13,55 @@ const glob = promisify(g)
 export const resolve = promisify(r)
 const readFile = promisify(fs.readFile)
 const debug = createDebug('dead-code-scanner:scan-file')
+const debugParseErrors = debug.extend('parse-error')
 
+// Enable as many plugins as I can so that people don't need to configure
+// anything.
 const plugins = [
-  'estree',
-  'jsx',
-  // 'flow',
-  // 'typescript',
-  'doExpressions',
-  'objectRestSpread',
-  'decorators',
-  'classProperties',
-  'classPrivateProperties',
-  'classPrivateMethods',
-  'exportExtensions',
-  'asyncGenerators',
-  'functionBind',
-  'functionSent',
-  'dynamicImport',
-  'numericSeparator',
-  'optionalChaining',
-  'importMeta',
-  'bigInt'
+  require('@babel/plugin-syntax-async-generators'),
+  require('@babel/plugin-syntax-bigint'),
+  require('@babel/plugin-syntax-class-properties'),
+  [
+    require('@babel/plugin-syntax-decorators'),
+    { decoratorsBeforeExport: false }
+  ],
+  require('@babel/plugin-syntax-do-expressions'),
+  require('@babel/plugin-syntax-dynamic-import'),
+  require('@babel/plugin-syntax-export-default-from'),
+  require('@babel/plugin-syntax-export-namespace-from'),
+  require('@babel/plugin-syntax-function-bind'),
+  require('@babel/plugin-syntax-function-sent'),
+  require('@babel/plugin-syntax-import-meta'),
+  require('@babel/plugin-syntax-json-strings'),
+  require('@babel/plugin-syntax-jsx'),
+  require('@babel/plugin-syntax-logical-assignment-operators'),
+  require('@babel/plugin-syntax-nullish-coalescing-operator'),
+  require('@babel/plugin-syntax-numeric-separator'),
+  require('@babel/plugin-syntax-object-rest-spread'),
+  require('@babel/plugin-syntax-optional-catch-binding'),
+  require('@babel/plugin-syntax-optional-chaining'),
+  [
+    require('@babel/plugin-syntax-pipeline-operator'),
+    { proposal: 'minimal' }
+  ],
+  require('@babel/plugin-syntax-throw-expressions')
 ]
 
 function parseCode (code) {
   try {
-    return parse(code, { sourceType: 'module', plugins: plugins.concat(['flow']) })
+    return parse(code, {
+      sourceType: 'module',
+      plugins: plugins.concat([require('@babel/plugin-syntax-flow')])
+    })
   } catch (e) {
   }
   try {
-    return parse(code, { sourceType: 'module', plugins: plugins.concat(['typescript']) })
+    return parse(code, {
+      sourceType: 'module',
+      plugins: plugins.concat[require('@babel/plugin-syntax-typescript')]
+    })
   } catch (e) {
+    debugParseErrors(e)
   }
 }
 
@@ -173,17 +189,10 @@ const resolveImports = (helpers, filePath, fileInfo) => async (acc: Promise<Arra
     // When using module roots, this needs to be made into a relative path
     let mName = (i === 0) ? moduleName : `./${moduleName}`
     try {
-      if (moduleName.slice(0, 2) === 'ui') {
-        debug(mName, basedir)
-      }
       const nextFile = await resolve(mName, {
         basedir,
         extensions: helpers.extensions
       })
-
-      if (moduleName.slice(0, 2) === 'ui') {
-        debug('found', nextFile)
-      }
 
       if (!helpers.inSrc(nextFile)) {
         return acc
@@ -243,6 +252,8 @@ export default async function scanFile (context: Context, helpers: Helpers, file
   const resolvedFiles: Array<string> = await fileInfo.imports
     .map((tmp): string => tmp.moduleName)
     .reduce(resolveImports(helpers, filePath, fileInfo), Promise.resolve([]))
+
+  debug(filePath, resolvedFiles)
 
   await Promise.all(
     resolvedFiles

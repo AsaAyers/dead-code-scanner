@@ -1,7 +1,6 @@
 {
   "presets": [
-    ["env", { "targets": { "node": "6" } }],
-    "flow"
+    ["@babel/env", { "targets": { "node": "9" } }],
+    "@babel/preset-flow"
   ],
-  "plugins": ["transform-async-to-generator", "transform-object-rest-spread"]
 }
