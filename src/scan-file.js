@@ -119,6 +119,29 @@ const visitors = {
       path.traverse(importVisitors, { fileInfo, moduleName })
     }
   },
+  ExportAllDeclaration ({ node }) {
+    if (t.isLiteral(node.source)) {
+      const fileInfo: FileInfo = this.fileInfo
+      const moduleName = node.source.value
+      fileInfo.imports.push({
+        imported: 'default',
+        moduleName
+      })
+    }
+  },
+  ExportNamedDeclaration ({ node }) {
+    const fileInfo: FileInfo = this.fileInfo
+    const moduleName = t.isLiteral(node.source)
+      ? node.source.value
+      : undefined
+
+    if (moduleName) {
+      fileInfo.imports.push({
+        imported: 'default',
+        moduleName
+      })
+    }
+  },
   CallExpression (path) {
     const fileInfo: FileInfo = this.fileInfo
     const isRequire = t.isIdentifier(path.node.callee, { name: 'require' })
