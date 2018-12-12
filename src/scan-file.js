@@ -188,6 +188,8 @@ const visitors = {
   }
 }
 
+const nodeModuleRegex = /.*node_modules\/(@[^/]*\/)?[^/]*/
+
 const resolveImports = (helpers, filePath, fileInfo) => async (acc: Promise<Array<string>>, moduleName: string): Promise<Array<string>> => {
   // if (moduleName[0] !== '.') return acc
   if (moduleName.indexOf('*') >= 0) {
@@ -217,16 +219,20 @@ const resolveImports = (helpers, filePath, fileInfo) => async (acc: Promise<Arra
         extensions: helpers.extensions
       })
 
-      if (!helpers.inSrc(nextFile)) {
-        return acc
+      const match = nextFile.match(nodeModuleRegex)
+      if (match) {
+        // If `nextFile` is `whatever/node_modules/something/dist/index.js`,
+        // only keep the path to the node module:
+        // `whatever/node_modules/something`. For node modules we don't care
+        // about the individual files just that anything in the depdency was
+        // used at some point.
+        return (await acc).concat([match[0]])
       }
+
       return (await acc).concat([nextFile])
     } catch (e) {
       // pass
     }
-  }
-  if (moduleName.slice(0, 2) === 'ui') {
-    process.exit(1)
   }
 
   fileInfo.errors.push({
@@ -255,22 +261,40 @@ export default async function scanFile (context: Context, helpers: Helpers, file
   if (fileInfo.visited === true) return
   fileInfo.visited = true
 
-  const code: string = String(await readFile(filePath))
-  const ast = parseCode(code)
-  if (!ast) {
-    const ext = path.extname(filePath)
-    fileInfo.errors.push({
-      group: `parse error ${ext}`
+  const isPackageJson = path.basename(filePath) === 'package.json'
+
+  if (isPackageJson) {
+    const packageJson = JSON.parse(String(fs.readFileSync(filePath)))
+    debug(packageJson)
+    const dependencies = {
+      ...packageJson.dependencies,
+      ...packageJson.devDependencies
+    }
+
+    fileInfo.imports = Object.keys(dependencies).map(packageName => {
+      return {
+        imported: 'default',
+        moduleName: path.join(packageName, 'package.json')
+      }
     })
-    return
+  } else {
+    const code: string = String(await readFile(filePath))
+    const ast = parseCode(code)
+    if (!ast) {
+      const ext = path.extname(filePath)
+      fileInfo.errors.push({
+        group: `parse error ${ext}`
+      })
+      return
+    }
+    const sourceOfNode = ({ start, end }) => {
+      return code.substr(
+        start,
+        (end - start)
+      )
+    }
+    traverse(ast, visitors, undefined, { fileInfo, code, sourceOfNode })
   }
-  const sourceOfNode = ({ start, end }) => {
-    return code.substr(
-      start,
-      (end - start)
-    )
-  }
-  traverse(ast, visitors, undefined, { fileInfo, code, sourceOfNode })
 
   const resolvedFiles: Array<string> = await fileInfo.imports
     .map((tmp): string => tmp.moduleName)
@@ -279,8 +303,19 @@ export default async function scanFile (context: Context, helpers: Helpers, file
   debug(filePath, resolvedFiles)
 
   await Promise.all(
-    resolvedFiles
-      .filter(helpers.accepts)
-      .map(nextFile => scanFile(context, helpers, nextFile))
+    resolvedFiles.map(nextFile => {
+      if (isPackageJson) {
+        context[nextFile] = context[nextFile] || { visited: false, imports: [], errors: [] }
+        context[nextFile].dependency = true
+        return
+      }
+
+      if (!helpers.inSrc(nextFile)) {
+        context[nextFile] = context[nextFile] || { visited: true, imports: [], errors: [] }
+        context[nextFile].visited = true
+      } else if (helpers.accepts(nextFile) || path.basename(nextFile) === 'package.json') {
+        return scanFile(context, helpers, nextFile)
+      }
+    })
   )
 }

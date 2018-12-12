@@ -63,6 +63,7 @@ type Report = {
   errorCount: number,
   errors: Array<Array<string>>,
   notFound: Array<string>,
+  unusedDependencies: Array<string>,
 }
 function buildReport (root: string, ctx: Context): Report {
   const context = rekeyContext(root, ctx)
@@ -70,14 +71,18 @@ function buildReport (root: string, ctx: Context): Report {
     scannedCount: 0,
     errorCount: 0,
     errors: [],
-    notFound: []
+    notFound: [],
+    unusedDependencies: []
   }
 
   const fileList = Object.keys(context)
+  debug(fileList)
   fileList.forEach(name => {
     const fileInfo = context[name]
     if (fileInfo.visited) {
       report.scannedCount++
+    } else if (fileInfo.dependency === true) {
+      report.unusedDependencies.push(name)
     } else {
       report.notFound.push(name)
     }
@@ -105,7 +110,7 @@ const sortByColumns = (columns: Array<number>) => (a, b) => {
   return 0
 }
 
-function logReport ({ errorCount, errors, notFound }: Report) {
+function logReport ({ errorCount, errors, notFound, unusedDependencies }: Report) {
   const errorOptions = {
     drawHorizontalLine: (index, size) => {
       return index === 0 || index === 1 || index === size - 1 || index === size
@@ -120,7 +125,17 @@ function logReport ({ errorCount, errors, notFound }: Report) {
 
   write('Not found:')
   write(makeTree(notFound))
-  write('Unreachable files:', notFound.length)
+  write('total:', notFound.length)
+
+  if (unusedDependencies.length > 0) {
+    write('\nPotentially unused dependencies:')
+    write('(Some tools like eslint plugins will show up as false positives here)')
+    write(makeTree(unusedDependencies.map(
+      // Add an extra space to make it easier to copy and paste
+      dep => dep.replace(/node_modules\//, nm => `${nm} `)
+    )))
+    write('total:', notFound.length)
+  }
 
   write(errorTable)
 }
@@ -136,24 +151,33 @@ type Options = {
   out: ?string,
 }
 
+const flatten = (arr) => arr.reduce(
+  (flat, next) => flat.concat(
+    Array.isArray(next) ? next : [ next ]
+  ),
+  []
+)
+
+const unique = (arr) => [...new Set(arr)]
+
 async function cli (options: Options) {
   const { _: files, root, src, webpack, ext, tests, ignore: ignorePatterns } = options
   const extensions = ext.split(',')
 
   if (webpack) {
+    const webpackFile = path.join(process.cwd(), webpack)
     // $FlowFixMe
-    let webpackConfig: any = require(path.join(process.cwd(), webpack))
+    let webpackConfig: any = require(webpackFile)
     if (typeof webpackConfig === 'function') {
       webpackConfig = webpackConfig()
     }
 
     // This assumes your entries are in the format `main: ['./main'],
     // other['./other']`
-    const entries = [...new Set(
-      Object.values(webpackConfig.entry).reduce((entries, next) => entries.concat(
-        Array.isArray(next) ? next : [ next ]
-      ), [])
-    )].sort()
+    const entries = unique(flatten([
+      webpackFile,
+      ...Object.values(webpackConfig.entry)
+    ])).sort()
 
     if (entries.length > 0) {
       debug('Found entries in webpack', entries)

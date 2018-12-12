@@ -14,6 +14,7 @@ export type FileInfo = {
   visited: bool,
   imports: Array<Import>,
   errors: Array<ErrorEntry>,
+  dependency?: boolean,
 }
 
 export type Context = {

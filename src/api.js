@@ -115,7 +115,7 @@ export async function scanFiles ({ root, src, files, ignorePatterns, extensions,
   const testMatcher = ignore()
   testMatcher.add(tests)
 
-  let context
+  let context = {}
   try {
     const options = {
       accepts,
@@ -129,7 +129,7 @@ export async function scanFiles ({ root, src, files, ignorePatterns, extensions,
         files.push(filename)
       }
     }
-    context = await buildContext(src, options)
+    context = await buildContext(src, options, context)
   } catch (e) {
     console.log('error building context: ', e)
     throw e
@@ -141,6 +141,8 @@ export async function scanFiles ({ root, src, files, ignorePatterns, extensions,
     moduleRoots,
     inSrc: (filename) => path.relative(src, filename).substr(0, 2) !== '..'
   }
+  await scanFile(context, helpers, packageJson)
+
   await Promise.all(
     files.map(file => scanFile(context, helpers, file))
   )
