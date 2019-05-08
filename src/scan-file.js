@@ -254,7 +254,9 @@ export default async function scanFile (context: Context, helpers: Helpers, file
     fileInfo = context[filePath] = {
       visited: false,
       imports: [],
-      errors: []
+      errors: [],
+      resolvedModules: [],
+      importedBy: []
     }
   }
 
@@ -299,19 +301,29 @@ export default async function scanFile (context: Context, helpers: Helpers, file
   const resolvedFiles: Array<string> = await fileInfo.imports
     .map((tmp): string => tmp.moduleName)
     .reduce(resolveImports(helpers, filePath, fileInfo), Promise.resolve([]))
+  fileInfo.resolvedFiles = resolvedFiles
 
   debug(filePath, resolvedFiles)
 
   await Promise.all(
     resolvedFiles.map(nextFile => {
+      context[nextFile] = context[nextFile] || {
+        visited: false,
+        imports: [],
+        errors: [],
+        resolvedModules: [],
+        importedBy: []
+      }
+      context[nextFile].importedBy = context[nextFile].importedBy || []
+      context[nextFile].importedBy.push(filePath)
+      context[nextFile].inSrc = helpers.inSrc(nextFile)
+
       if (isPackageJson) {
-        context[nextFile] = context[nextFile] || { visited: false, imports: [], errors: [] }
         context[nextFile].dependency = true
         return
       }
 
-      if (!helpers.inSrc(nextFile)) {
-        context[nextFile] = context[nextFile] || { visited: true, imports: [], errors: [] }
+      if (!context[nextFile].inSrc) {
         context[nextFile].visited = true
       } else if (helpers.accepts(nextFile) || path.basename(nextFile) === 'package.json') {
         return scanFile(context, helpers, nextFile)

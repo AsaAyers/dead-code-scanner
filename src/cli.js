@@ -47,6 +47,8 @@ const program = yargs
 
   .describe('out', 'Output file to list unreachable files')
 
+  .boolean('json')
+
   .coerce('_', (files) => files.map(expandFile))
   .demandOption('src')
 
@@ -221,9 +223,12 @@ async function cli (options: Options) {
     })
     const report = buildReport(root, context)
 
-    logReport(report)
+    if (options.json) {
+      console.log(JSON.stringify(context, null, 2))
+    } else {
+      logReport(report)
+    }
 
-    console.log('out', options.out)
     if (options.out != null) {
       fs.writeFileSync(options.out, report.notFound.join('\n'))
     }

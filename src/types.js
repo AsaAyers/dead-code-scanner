@@ -15,6 +15,8 @@ export type FileInfo = {
   imports: Array<Import>,
   errors: Array<ErrorEntry>,
   dependency?: boolean,
+  resolvedModules: Array<string>,
+  importedBy: Array<string>,
 }
 
 export type Context = {
